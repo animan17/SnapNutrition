@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:barcode_scan2/barcode_scan2.dart';
 import 'app_data.dart'; // Import our global data
 import 'common_app_bar.dart';
 import 'main.dart';  // Add this import at the top  
@@ -23,9 +24,13 @@ class _SnapPhotoScreenState extends State<SnapPhotoScreen> {
   bool _isLoading = false;
   final ImagePicker _picker = ImagePicker();
 
-  // Add these class-level variables
   Map<String, dynamic>? _parsedData;
   Meal? _currentMeal;
+
+  Map<String, dynamic>? barcodeMacros;
+  String? barcodeValue;
+  bool isBarcodeLoading = false;
+  bool barcodeAdded = false;
 
   // Replace with your actual Gemini API key and endpoint.
   final String geminiApiKey = 'AIzaSyDyvE8u8BDGS0EBtL_mD9hucKblndBlJHc';
@@ -288,7 +293,6 @@ class _SnapPhotoScreenState extends State<SnapPhotoScreen> {
     }
   }
 
-  // Add this method to handle quantity updates
   void _updateItemQuantity(Map<String, dynamic> item, String newValue) {
     if (_currentMeal == null) return;
 
@@ -323,15 +327,132 @@ class _SnapPhotoScreenState extends State<SnapPhotoScreen> {
     });
   }
 
+  Future<void> scanBarcode() async {
+    setState(() {
+      isBarcodeLoading = true;
+      barcodeMacros = null;
+      barcodeValue = null;
+      barcodeAdded = false;
+    });
+
+    // Only use the barcode scanner, do not prompt for a separate camera image
+    var result = await BarcodeScanner.scan();
+    if (result.type == ResultType.Barcode && result.rawContent.isNotEmpty) {
+      barcodeValue = result.rawContent;
+      await fetchMacrosFromBarcode(barcodeValue!);
+
+      // Use the provided barcode.webp asset as the placeholder image
+      setState(() {
+        _image = null; // Clear _image so Image.file is not used
+      });
+    }
+    setState(() {
+      isBarcodeLoading = false;
+    });
+  }
+
+  Future<void> fetchMacrosFromBarcode(String barcode) async {
+    final url = 'https://world.openfoodfacts.org/api/v0/product/$barcode.json';
+    final response = await http.get(Uri.parse(url));
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      final nutriments = data['product']?['nutriments'];
+      final productName = data['product']?['product_name'] ?? 'Barcode Food';
+      setState(() {
+        barcodeMacros = {
+          'name': productName,
+          'Protein': nutriments != null && nutriments['proteins_100g'] != null
+              ? double.tryParse(nutriments['proteins_100g'].toString())?.toStringAsFixed(1) ?? '0.0'
+              : '0.0',
+          'Carbohydrates': nutriments != null && nutriments['carbohydrates_100g'] != null
+              ? double.tryParse(nutriments['carbohydrates_100g'].toString())?.toStringAsFixed(1) ?? '0.0'
+              : '0.0',
+          'Fat': nutriments != null && nutriments['fat_100g'] != null
+              ? double.tryParse(nutriments['fat_100g'].toString())?.toStringAsFixed(1) ?? '0.0'
+              : '0.0',
+        };
+        // Convert back to double for calculation, except for name
+        barcodeMacros = {
+          'name': barcodeMacros!['name'],
+          'Protein': double.tryParse(barcodeMacros!['Protein'].toString()) ?? 0.0,
+          'Carbohydrates': double.tryParse(barcodeMacros!['Carbohydrates'].toString()) ?? 0.0,
+          'Fat': double.tryParse(barcodeMacros!['Fat'].toString()) ?? 0.0,
+        };
+      });
+    }
+  }
+
+  Future<void> addBarcodeMacrosToDay() async {
+    if (barcodeMacros == null) return;
+    final barcodeImage = _image ?? File('');
+    final foodName = barcodeMacros!['name'] ?? 'Barcode Food';
+    final fakeResult = json.encode({
+      "items": [
+        {
+          "name": foodName,
+          "quantity": 100,
+          "macronutrientsPer100g": {
+            "Carbohydrates": barcodeMacros!['Carbohydrates'] ?? 0,
+            "Fat": barcodeMacros!['Fat'] ?? 0,
+            "Protein": barcodeMacros!['Protein'] ?? 0,
+          }
+        }
+      ]
+    });
+    setState(() {
+      _parsedData = json.decode(fakeResult);
+      _result = fakeResult;
+      _image = barcodeImage;
+    });
+    _updateNutrientsFromResult(fakeResult, isInitial: true);
+    setState(() {
+      barcodeAdded = true;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Added barcode macronutrients to today!')),
+    );
+  }
+
+  Widget _buildMacrosCard(Map<String, dynamic> macros) {
+    final name = macros['name'] ?? 'Barcode Food';
+    return Card(
+      color: Colors.green.shade100,
+      margin: const EdgeInsets.all(16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$name (per 100g):',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Carbohydrates: ${macros['Carbohydrates'] != null ? (macros['Carbohydrates'] as num).toStringAsFixed(1) : '-'}g',
+              style: const TextStyle(fontSize: 16),
+            ),
+            Text(
+              'Fat: ${macros['Fat'] != null ? (macros['Fat'] as num).toStringAsFixed(1) : '-'}g',
+              style: const TextStyle(fontSize: 16),
+            ),
+            Text(
+              'Protein: ${macros['Protein'] != null ? (macros['Protein'] as num).toStringAsFixed(1) : '-'}g',
+              style: const TextStyle(fontSize: 16),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAnalysisResult() {
     if (_parsedData == null || _result.isEmpty) {
       return const Text('Waiting for analysis...');
     }
 
     try {
-      // Use the stored _parsedData instead of parsing again
       final totals = _calculateTotalMacros(_parsedData!['items'] ?? []);
-      
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -359,8 +480,8 @@ class _SnapPhotoScreenState extends State<SnapPhotoScreen> {
               ),
             ),
           ),
-          if (_parsedData!['items'] != null) ...[
-            for (var item in _parsedData!['items']) ...[
+          if (_parsedData!['items'] != null)
+            for (var item in _parsedData!['items'])
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
@@ -403,10 +524,6 @@ class _SnapPhotoScreenState extends State<SnapPhotoScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
-            ],
-          ],
-          
         ],
       );
     } catch (e) {
@@ -416,6 +533,17 @@ class _SnapPhotoScreenState extends State<SnapPhotoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    Widget imageWidget;
+    if (barcodeMacros != null) {
+      // Show asset image for barcode scan (make sure the asset path matches your pubspec.yaml)
+      AssetImage barcode = const AssetImage('images/barcode.webp');
+      imageWidget = Image(image: barcode, width: 400, height: 400);
+    } else if (_image != null) {
+      imageWidget = Image.file(_image!, height: 200);
+    } else {
+      imageWidget = const Text('No image captured yet.');
+    }
+
     return Scaffold(
       appBar: const CommonAppBar(),
       body: SingleChildScrollView(
@@ -423,9 +551,7 @@ class _SnapPhotoScreenState extends State<SnapPhotoScreen> {
         child: Center(
           child: Column(
             children: [
-              _image == null
-                  ? const Text('No image captured yet.')
-                  : Image.file(_image!),
+              imageWidget,
               const SizedBox(height: 20),
               _isLoading
                   ? const CircularProgressIndicator()
@@ -435,7 +561,30 @@ class _SnapPhotoScreenState extends State<SnapPhotoScreen> {
                       label: const Text('Capture Food Image'),
                     ),
               const SizedBox(height: 20),
-              _buildAnalysisResult(),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('Scan Barcode'),
+                onPressed: scanBarcode,
+              ),
+              if (isBarcodeLoading)
+                const Padding(
+                  padding: EdgeInsets.all(16.0),
+                  child: CircularProgressIndicator(),
+                ),
+              if (barcodeMacros != null)
+                Column(
+                  children: [
+                    _buildMacrosCard(barcodeMacros!),
+                    ElevatedButton(
+                      onPressed: barcodeAdded ? null : addBarcodeMacrosToDay,
+                      child: Text(barcodeAdded
+                          ? 'Added!'
+                          : 'Add to Today\'s Nutrition'),
+                    ),
+                  ],
+                ),
+              // Only show analysis result if not barcode scan
+              if (barcodeMacros == null) _buildAnalysisResult(),
             ],
           ),
         ),
@@ -450,7 +599,6 @@ class _SnapPhotoScreenState extends State<SnapPhotoScreen> {
     super.dispose();
   }
 
-  // Add this method
   Future<String?> _getTestDate() async {
     return showDialog<String>(
       context: context,
@@ -458,7 +606,6 @@ class _SnapPhotoScreenState extends State<SnapPhotoScreen> {
     );
   }
 
-  // Modify your image picking method
   Future<void> _getImage(ImageSource source) async {
     final String? testDate = await _getTestDate();
     if (!mounted) return;
@@ -473,10 +620,8 @@ class _SnapPhotoScreenState extends State<SnapPhotoScreen> {
       setState(() {
         _image = File(pickedFile.path);
       });
-      // Process image...
     }
     
-    // Reset debug date after processing
     if (testDate != null) {
       AppData.setDebugDate(null);
     }

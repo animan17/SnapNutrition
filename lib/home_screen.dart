@@ -319,70 +319,80 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMealCard(BuildContext context, Meal meal) {
+    Widget mealImage;
+    // Show barcode asset if the meal is a barcode scan, else show the photo
+    if (meal.imageFilePath == 'images/barcode.webp' || meal.imageFilePath.endsWith('/barcode.webp')) {
+      mealImage = Image.asset('images/barcode.webp', height: 160, width: double.infinity, fit: BoxFit.cover);
+    } else if (meal.imageFilePath.isNotEmpty) {
+      mealImage = Image.file(File(meal.imageFilePath), height: 160, width: double.infinity, fit: BoxFit.cover);
+    } else {
+      mealImage = const Icon(Icons.fastfood, size: 100);
+    }
+
     return Card(
       margin: const EdgeInsets.only(bottom: 16),
       clipBehavior: Clip.antiAlias,
       elevation: 2,
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => SnapPhotoScreen()),
-          ).then((value) {
-            // If value is true (meaning data was updated) then force rebuild.
-            setState(() {});
-          });
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Image.file(
-              File(meal.imageFilePath),
-              height: 160,
-              width: double.infinity,
-              fit: BoxFit.cover,
-            ),
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    meal.name,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _buildNutrientBadge(
-                        Icons.grain,
-                        Colors.orange,
-                        'Protein',
-                        meal.getTotalNutrient('Protein'),
-                      ),
-                      _buildNutrientBadge(
-                        Icons.water_drop,
-                        Colors.yellow.shade700,
-                        'Fat',
-                        meal.getTotalNutrient('Fat'),
-                      ),
-                      _buildNutrientBadge(
-                        Icons.breakfast_dining,
-                        Colors.brown,
-                        'Carbs',
-                        meal.getTotalNutrient('Carbohydrates'),
-                      ),
-                    ],
-                  ),
-                ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          mealImage,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.delete, color: Colors.red),
+                tooltip: 'Delete Meal',
+                onPressed: () async {
+                  // Remove meal and subtract its macros from the day's nutrition
+                  final dateStr = _selectedDate.toString().split(' ')[0];
+                  await appData.deleteMeal(meal: meal, date: dateStr);
+                  await _loadData();
+                  setState(() {});
+                },
               ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  meal.name,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildNutrientBadge(
+                      Icons.grain,
+                      Colors.orange,
+                      'Protein',
+                      meal.getTotalNutrient('Protein'),
+                    ),
+                    _buildNutrientBadge(
+                      Icons.water_drop,
+                      Colors.yellow.shade700,
+                      'Fat',
+                      meal.getTotalNutrient('Fat'),
+                    ),
+                    _buildNutrientBadge(
+                      Icons.breakfast_dining,
+                      Colors.brown,
+                      'Carbs',
+                      meal.getTotalNutrient('Carbohydrates'),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

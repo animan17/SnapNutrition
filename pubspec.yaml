@@ -7,16 +7,17 @@ environment:
   sdk: ^3.7.0
 
 dependencies:
-  intl: ^0.18.0
+  intl: ^0.20.2
   flutter:
     sdk: flutter
   cupertino_icons: ^1.0.2
-  image_picker: ^0.8.7+3
+  image_picker: ^1.1.2
   http: ^1.1.0  # Updated to be compatible with google_fonts
-  fl_chart: ^0.70.2
+  fl_chart: ^0.71.0
   shared_preferences: ^2.2.2
-  google_fonts: ^5.1.0
-  flutter_markdown: ^0.6.18
+  google_fonts: ^6.2.1
+  flutter_markdown: ^0.7.7
+  barcode_scan2: ^4.2.0
 
 dev_dependencies:
   flutter_test:
@@ -25,6 +26,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - images/barcode.webp
+
 
 executables:
   set_test_date:

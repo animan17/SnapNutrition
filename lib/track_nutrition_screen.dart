@@ -7,7 +7,6 @@ import 'app_data.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'dart:math';
 
-
 class TrackNutritionScreen extends StatefulWidget {
   const TrackNutritionScreen({super.key});
 
@@ -16,7 +15,6 @@ class TrackNutritionScreen extends StatefulWidget {
 }
 
 class TrackNutritionScreenState extends State<TrackNutritionScreen> {
-  // Update nutrient colors to match the ones used in HomeScreen
   final Map<String, Color> nutrientColors = {
     'Protein': Colors.green,
     'Carbohydrates': Colors.orange,
@@ -26,7 +24,6 @@ class TrackNutritionScreenState extends State<TrackNutritionScreen> {
   Map<String, Map<String, int>> _nutritionHistory = {};
   bool _isLoading = true;
 
-  // Make loadData public
   void loadData() {
     _loadNutritionHistory();
   }
@@ -69,7 +66,6 @@ class TrackNutritionScreenState extends State<TrackNutritionScreen> {
   Widget _buildNutrientChart(String nutrient, Color color) {
     final appData = AppData();
 
-    // Add debug prints to check data
     print("[DEBUG] Building chart for $nutrient");
     print("[DEBUG] History entries: ${_nutritionHistory.length}");
     print("[DEBUG] Dates available: ${_nutritionHistory.keys.toList()}");
@@ -78,7 +74,6 @@ class TrackNutritionScreenState extends State<TrackNutritionScreen> {
       return const Center(child: Text('No data available'));
     }
 
-    // Sort entries by date
     final sortedEntries = _nutritionHistory.entries.toList()
       ..sort((a, b) => DateTime.parse(a.key).compareTo(DateTime.parse(b.key)));
 
@@ -94,34 +89,45 @@ class TrackNutritionScreenState extends State<TrackNutritionScreen> {
     print("[DEBUG] Spots: $spots");
     print("[DEBUG] Dates: $dates");
 
-    // Get daily target for this nutrient
     final dailyTarget = appData.dailyTargets[nutrient] ?? 0;
     final maxY = [
       ...spots.map((s) => s.y),
       dailyTarget.toDouble()
     ].reduce(max) * 1.2;
 
-    // Calculate reasonable interval for y-axis
-    final maxValue = maxY.ceil();
-    final yInterval = (maxValue > 100) ? 50.0 : (maxValue > 50 ? 20.0 : 10.0);
+    final minY = 0.0;
+    final range = maxY - minY;
+    double yInterval = 10.0;
+    if (range > 0) {
+      yInterval = (range / 7).ceilToDouble();
+      if (yInterval > 100) {
+        yInterval = (yInterval / 100).ceil() * 100;
+      } else if (yInterval > 50) {
+        yInterval = (yInterval / 50).ceil() * 50;
+      } else if (yInterval > 20) {
+        yInterval = (yInterval / 20).ceil() * 20;
+      } else if (yInterval > 10) {
+        yInterval = (yInterval / 10).ceil() * 10;
+      }
+    }
 
     return Column(
       children: [
-        const SizedBox(height: 24),  // Add spacing above chart title
+        const SizedBox(height: 24),
         Text(nutrient,
             style: GoogleFonts.lato(fontSize: 18, fontWeight: FontWeight.bold, color: color)),
         const SizedBox(height: 16),
         Container(
-          margin: const EdgeInsets.symmetric(horizontal: 24.0), // Increased margin
-          padding: const EdgeInsets.only(right: 16.0, bottom: 24.0), // Added bottom padding for x-axis labels
+          margin: const EdgeInsets.symmetric(horizontal: 24.0),
+          padding: const EdgeInsets.only(right: 16.0, bottom: 24.0),
           child: SizedBox(
-            height: 220, // Increased height for x-axis labels
+            height: 220,
             child: LineChart(
               LineChartData(
                 gridData: FlGridData(
                   show: true,
                   drawVerticalLine: true,
-                  horizontalInterval: yInterval,  // Use calculated interval
+                  horizontalInterval: yInterval,
                   verticalInterval: 1,
                   getDrawingHorizontalLine: (value) {
                     return FlLine(
@@ -141,17 +147,16 @@ class TrackNutritionScreenState extends State<TrackNutritionScreen> {
                     sideTitles: SideTitles(
                       showTitles: true,
                       interval: 1,
-                      reservedSize: 35, // Increased space for x-axis labels
+                      reservedSize: 35,
                       getTitlesWidget: (value, meta) {
-                        // Only show labels for exact integer values
                         if (value % 1 == 0) {
                           final index = value.toInt();
                           if (index >= 0 && index < dates.length) {
                             final date = DateTime.parse(dates[index]);
                             return SideTitleWidget(
                               meta: meta,
-                              space: 10, // Increased space between label and axis
-                              angle: -45, // Better angle for readability
+                              space: 10,
+                              angle: -45,
                               child: Text(
                                 '${date.day} ${_getMonthAbbr(date)}',
                                 style: TextStyle(
@@ -170,9 +175,10 @@ class TrackNutritionScreenState extends State<TrackNutritionScreen> {
                   leftTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      interval: yInterval,  // Use calculated interval
-                      reservedSize: 45, // Increased space for y-axis labels
+                      interval: yInterval,
+                      reservedSize: 45,
                       getTitlesWidget: (value, meta) {
+                        if ((value / yInterval) % 2 != 0 && yInterval < 20) return const SizedBox.shrink();
                         return Text(
                           value.toInt().toString(),
                           style: TextStyle(
@@ -186,26 +192,26 @@ class TrackNutritionScreenState extends State<TrackNutritionScreen> {
                   ),
                   rightTitles: AxisTitles(
                     sideTitles: SideTitles(showTitles: false),
-                    axisNameSize: 40,  // Add space on right
+                    axisNameSize: 40,
                   ),
                   topTitles: AxisTitles(axisNameWidget: null),
                 ),
                 borderData: FlBorderData(
                   show: true,
                   border: Border.all(
-                    color: Colors.grey[600]!, // Darker border
+                    color: Colors.grey[600]!,
                     width: 1,
                   ),
                 ),
                 minX: -0.5,
                 maxX: spots.length.toDouble() - 0.5,
-                minY: 0,
+                minY: minY,
                 maxY: maxY,
                 lineBarsData: [
                   LineChartBarData(
                     spots: spots,
-                    isCurved: true, // Enable curved lines
-                    curveSmoothness: 0.35, // Adjust curve smoothness
+                    isCurved: true,
+                    curveSmoothness: 0.35,
                     color: color,
                     dotData: FlDotData(show: true),
                     belowBarData: BarAreaData(
@@ -255,7 +261,9 @@ class TrackNutritionScreenState extends State<TrackNutritionScreen> {
     print("[DEBUG] Building TrackNutritionScreen");
     
     return Scaffold(
-      appBar: const CommonAppBar(),
+      appBar: CommonAppBar(
+
+      ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator())
         : Column(

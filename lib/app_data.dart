@@ -182,6 +182,25 @@ class AppData {
     _debugPrintState('adding meal');
   }
 
+  Future<void> deleteMeal({required Meal meal, required String date}) async {
+    // Remove meal from meals list
+    _meals[date]?.removeWhere((m) => m.id == meal.id);
+
+    // Subtract meal's macros from the day's nutrition
+    final prefs = await SharedPreferences.getInstance();
+    final nutritionHistory = await getNutritionHistory();
+    final dayData = nutritionHistory[date] ?? {'Protein': 0, 'Carbohydrates': 0, 'Fat': 0};
+    dayData['Protein'] = (dayData['Protein'] ?? 0) - meal.getTotalNutrient('Protein').round();
+    dayData['Carbohydrates'] = (dayData['Carbohydrates'] ?? 0) - meal.getTotalNutrient('Carbohydrates').round();
+    dayData['Fat'] = (dayData['Fat'] ?? 0) - meal.getTotalNutrient('Fat').round();
+    // Prevent negative values
+    dayData['Protein'] = (dayData['Protein'] ?? 0) < 0 ? 0 : (dayData['Protein'] ?? 0);
+    dayData['Carbohydrates'] = (dayData['Carbohydrates'] ?? 0) < 0 ? 0 : (dayData['Carbohydrates'] ?? 0);
+    dayData['Fat'] = (dayData['Fat'] ?? 0) < 0 ? 0 : (dayData['Fat'] ?? 0);
+    nutritionHistory[date] = dayData;
+    await prefs.setString('nutritionData', jsonEncode(nutritionHistory));
+  }
+
   Map<String, int> calculateNutritionTotals(Meal meal) {
     Map<String, int> totals = {
       'Protein': 0,
